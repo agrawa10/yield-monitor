@@ -1,0 +1,33 @@
+# build application files
+*.apk
+*.ap_
+
+# files for the dex VM
+*.dex
+
+# java class files
+*.class
+
+# generated files
+bin/
+gen/
+out/
+
+# local config files
+local.properties
+/*/local.properties
+
+# eclipse project files
+.project
+.classpath
+.settings
+proguard-project.txt
+
+target/
+libs/
+classes/
+*~
+*.swp
+
+
+
