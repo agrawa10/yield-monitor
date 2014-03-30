@@ -5,6 +5,11 @@
         android:title="@string/action_undo"
         android:showAsAction="ifRoom" />
     <item
+        android:id="@+id/action_area"
+        android:icon="@drawable/ic_action_area"
+        android:title="@string/action_area"
+        android:showAsAction="ifRoom" />
+    <item
         android:id="@+id/action_settings"
         android:orderInCategory="100"
         android:showAsAction="never"

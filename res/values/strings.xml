@@ -6,5 +6,6 @@
     <string name="hello_world">Hello world!</string>
     <string name="action_statistics">Statistics</string>
     <string name="action_undo">Undo</string>
+    <string name="action_area">Area</string>
 
 </resources>

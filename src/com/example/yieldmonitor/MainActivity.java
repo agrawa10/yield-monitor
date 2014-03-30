@@ -1,6 +1,7 @@
 package com.example.yieldmonitor;
 
 import java.util.ArrayList;
+import java.lang.String;
 
 import android.os.Bundle;
 import android.view.Menu;
@@ -14,12 +15,17 @@ import com.google.android.gms.maps.GoogleMap.OnMarkerDragListener;
 import com.google.android.gms.maps.model.*;
 import com.google.android.gms.maps.GoogleMap.*;
 
+import com.google.maps.android.PolyUtil;
+import com.google.maps.android.SphericalUtil;
+
 public class MainActivity extends FragmentActivity {
+	
+	static final double EARTH_RADIUS = 6371009;
 	
 	GoogleMap googleMap;
     ArrayList<LatLng> points; //Vertices of the polygon to be plotted
     ArrayList<Polyline> polylines; //Lines of the polygon (required for clearing)
-    Marker iMarker; Marker fMarker; //Initial and final markers
+    Marker iMarker, fMarker, inMarker; //Initial and final markers
     boolean longClickClear;
     PolylineOptions previewPolylineOptions;
     Polyline previewPolyline;
@@ -67,8 +73,17 @@ public class MainActivity extends FragmentActivity {
 
             		// Adding the marker to the map
             		iMarker = googleMap.addMarker(iMarkerOptions); fMarker = googleMap.addMarker(fMarkerOptions);
-            		fMarker.setDraggable(true);
+            		iMarker.setDraggable(false); fMarker.setDraggable(true);
             		longClickClear = false;
+            	}
+            	else if (points.size() > 0) {
+            		if (inMarker != null)
+            			inMarker.remove();
+            		MarkerOptions inMarkerOptions = new MarkerOptions();
+            		inMarkerOptions.position(point).icon(BitmapDescriptorFactory.fromResource(R.drawable.custom_marker));
+            		boolean inside = PolyUtil.containsLocation(point, points, true);
+            		Toast.makeText(getApplicationContext(), String.format("%s", Boolean.toString(inside)), Toast.LENGTH_SHORT).show();
+            		inMarker = googleMap.addMarker(inMarkerOptions);
             	}
             }
         });
@@ -96,16 +111,14 @@ public class MainActivity extends FragmentActivity {
 
 			@Override
 			public boolean onMarkerClick(Marker marker) {
-				// TODO Auto-generated method stub
-				if (marker != fMarker) { //Initial marker clicked
+				if (marker.equals(iMarker)) { //Initial marker clicked
 					points.add(marker.getPosition()); //Current position of movable marker added to list 
 					//Polyline added to map and to ArrayList polylines
 					polylines.add(googleMap.addPolyline(new PolylineOptions().color(Color.BLUE).width(3).addAll(points)));
 					Toast.makeText(getApplicationContext(), "Long press to clear polygon.", Toast.LENGTH_SHORT).show();
 			    	longClickClear = true;
-			    	return true;
 				}
-				return false;
+				return true;
 			}
         });
         
@@ -161,17 +174,26 @@ public class MainActivity extends FragmentActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
       switch (item.getItemId()) {
       case R.id.action_undo:
-    	  if (polylines.size() == 0) {
-    		  iMarker.remove(); fMarker.remove();
-    		  points.remove(points.size() - 1);
+    	 if (polylines.size() > 0) {
+    		 polylines.remove(polylines.size() - 1).remove(); //Removes element from array and corresponding polyline from map
+    	     points.remove(points.size() - 1);
+    	     fMarker.setPosition(points.get(points.size() - 1));
+    	 } else if (polylines.size() == 0) {
+    		 if (points.size() > 0) {
+    		 points.remove(points.size() - 1);
+             iMarker.remove(); fMarker.remove();
     	  }
-    	  else if (polylines.size() > 0) {
-    		  Polyline toRemove = polylines.remove(polylines.size() - 1);
-    		  toRemove.remove();
-    		  points.remove(points.size() - 1);
-    		  fMarker.setPosition(points.get(points.size() - 1));
-    	  }
-    	  break;
+    	}
+    	break;
+    	  
+      case R.id.action_area:
+    	double area = SphericalUtil.computeArea(points);
+    	if (area != 0 && points.get(0).equals(points.get(points.size() - 1))) {
+    		Toast.makeText(this, String.format("Area: %.2e sq meters", area), Toast.LENGTH_LONG).show();
+    	} else {
+    		Toast.makeText(this, "Complete polygon to compute area.", Toast.LENGTH_SHORT).show();
+    	}
+    	break;
     	  
       case R.id.action_settings: // action with ID action_settings was selected
         Toast.makeText(this, "Settings selected", Toast.LENGTH_SHORT)
