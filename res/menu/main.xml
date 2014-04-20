@@ -9,10 +9,14 @@
         android:icon="@drawable/ic_action_area"
         android:title="@string/action_area"
         android:showAsAction="ifRoom" />
+    <item 
+        android:id="@+id/action_average"
+        android:icon="@drawable/ic_action_select_all"
+        android:title="@string/action_area"
+        android:showAsAction="ifRoom" />
     <item
         android:id="@+id/action_settings"
         android:orderInCategory="100"
         android:showAsAction="never"
         android:title="@string/action_settings"/>
-
 </menu>
