@@ -1,10 +1,10 @@
 package com.example.yieldmonitor;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.lang.String;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -45,8 +45,8 @@ public class MainActivity extends FragmentActivity {
     Polyline previewPolyline;
     LatLng overlayLocation = new LatLng(40.432923, -86.918481);
     TextView AreaTextView;
-    Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
-    Projection projection = googleMap.getProjection();
+    //Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
+    //Projection projection = googleMap.getProjection();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -215,37 +215,66 @@ public class MainActivity extends FragmentActivity {
     	        break;
     	        
             case R.id.action_average:
-            	//Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
-            	int height = vMap.getHeight();
-            	int width = vMap.getWidth();
-            	//Projection projection = googleMap.getProjection();
-            	Point point = projection.toScreenLocation(overlayLocation);
+            	final Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
+            	final int height = vMap.getHeight();
+            	final int width = vMap.getWidth();
+            	final Projection projection = googleMap.getProjection();
+            	final Point point = projection.toScreenLocation(overlayLocation);
+            	final Handler mHandler = new Handler();
             	
-            	int[] pixels = new int[height * width];
-            	vMap.getPixels(pixels, 0, width, 0, 0, width, height);
+            	final PopupWindow interimPopup = makePopupView(this, "Calculating...");
             	
-            	double sum = 0;
-            	for (int y = 0; y < height; y++) {
-            		point.y = y;
-        			for (int x = 0; x < width; x++) {
-            			point.x = x;
-            			LatLng position = projection.fromScreenLocation(point);
-            			if (PolyUtil.containsLocation(position, points, true)) {
-              				int index = y * width + x;
-              			    int R = (pixels[index] >> 16) & 0xff;
-              			    int G = (pixels[index] >> 8) & 0xff;
-              			    int B = pixels[index] & 0xff;
-              			    sum += (R + G + B);
-              			    if (sum != 0) {
-              			    	MarkerOptions inMarkerOptions = new MarkerOptions();
-                        		inMarkerOptions.position(position);
-                        		inMarker = googleMap.addMarker(inMarkerOptions);
-              			    }
-              			    pixels[index] = 0xff000000 | (R << 16) | (G << 8)| B;
-              			}
+            	//Fire off a thread to calculate average
+            	Thread t = new Thread() {
+            		public void run() {
+                    	int[] pixels = new int[height * width];
+                    	vMap.getPixels(pixels, 0, width, 0, 0, width, height);
+            			double sum = 0;
+                    	for (int y = 0; y < height; y++) {
+                    		point.y = y;
+                			for (int x = 0; x < width; x++) {
+                    			point.x = x;
+                    			LatLng position = projection.fromScreenLocation(point);
+                    			if (PolyUtil.containsLocation(position, points, true)) {
+                      				int index = y * width + x;
+                      			    int R = (pixels[index] >> 16) & 0xff;
+                      			    int G = (pixels[index] >> 8) & 0xff;
+                      			    int B = pixels[index] & 0xff;
+                      			    sum += (R + G + B);
+                      			    if (sum != 0) {
+                      			    	MarkerOptions inMarkerOptions = new MarkerOptions();
+                                		inMarkerOptions.position(position);
+                                		inMarker = googleMap.addMarker(inMarkerOptions);
+                      			    }
+                      			    pixels[index] = 0xff000000 | (R << 16) | (G << 8)| B;
+                      			}
+                    		}
+                    	}
+                    	final double f_sum = sum;
+                    	mHandler.post(new Runnable() {
+                    		public void run() {
+                        		//makePopupView(this, String.format("Average: %.2e sq meters", f_sum / (width * height)));
+                    			LayoutInflater layoutInflater = (LayoutInflater) getBaseContext().getSystemService(LAYOUT_INFLATER_SERVICE);
+                    			View popupView = layoutInflater.inflate(R.layout.popup, null);
+                    			final PopupWindow popupWindow = new PopupWindow(popupView, LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+                    			popupWindow.showAtLocation(popupView, Gravity.BOTTOM, 0, 0);
+                    			
+                    			AreaTextView = (TextView) popupView.findViewById(R.id.areaValue);
+                    			AreaTextView.setText(String.format("Average: %.2e sq meters", f_sum / (width * height)));
+                    			
+                    			Button btnDismiss = (Button) popupView.findViewById(R.id.dismiss);
+                    	    	btnDismiss.setOnClickListener(new Button.OnClickListener() {
+                    	    		public void onClick(View v) {
+                    	    			popupWindow.dismiss();
+                    	    		}
+                    	    	});
+                    	    	
+                    	    	interimPopup.dismiss();
+                    		}
+                    	});
             		}
-            	}
-            	makePopupView(this, String.format("Average: %.2e sq meters", sum / (width * height)));
+            	};
+            	t.start();
             	break;
             	
             case R.id.action_settings: // action with ID action_settings was selected
@@ -258,14 +287,14 @@ public class MainActivity extends FragmentActivity {
         return true;
     }
     
-    private void makePopupView(Activity context, String string) {
+    private PopupWindow makePopupView(Activity context, String string) {
     	//Inflate popup.xml
     	LayoutInflater layoutInflater = (LayoutInflater) getBaseContext().getSystemService(LAYOUT_INFLATER_SERVICE);
     	View popupView = layoutInflater.inflate(R.layout.popup, null);
     	final PopupWindow popupWindow = new PopupWindow(popupView, LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
     	popupWindow.showAtLocation(popupView, Gravity.BOTTOM, 0, 0);
     	
-    	AreaTextView = (TextView)popupView.findViewById(R.id.areaValue);
+    	AreaTextView = (TextView) popupView.findViewById(R.id.areaValue);
     	AreaTextView.setText(string);
     	
     	Button btnDismiss = (Button) popupView.findViewById(R.id.dismiss);
@@ -274,5 +303,6 @@ public class MainActivity extends FragmentActivity {
     			popupWindow.dismiss();
     		}
     	});
+    	return popupWindow;
     }
 }
