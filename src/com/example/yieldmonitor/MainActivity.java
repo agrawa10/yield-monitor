@@ -5,6 +5,7 @@ import java.lang.String;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -35,6 +36,8 @@ import com.google.maps.android.SphericalUtil;
 public class MainActivity extends FragmentActivity {
     
     static final double EARTH_RADIUS = 6371009;
+
+	private static final String TAG = null;
 	
     GoogleMap googleMap;
     ArrayList<LatLng> points; //Vertices of the polygon to be plotted
@@ -216,42 +219,19 @@ public class MainActivity extends FragmentActivity {
     	        
             case R.id.action_average:
             	final Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
-            	final int height = vMap.getHeight();
-            	final int width = vMap.getWidth();
+            	//final int height = vMap.getHeight();
+            	//final int width = vMap.getWidth();
             	final Projection projection = googleMap.getProjection();
             	final Point point = projection.toScreenLocation(overlayLocation);
             	final Handler mHandler = new Handler();
-            	
             	final PopupWindow interimPopup = makePopupView(this, "Calculating...");
+            	final Point overlayPoint = projection.toScreenLocation(overlayLocation);
             	
             	//Fire off a thread to calculate average
             	Thread t = new Thread() {
             		public void run() {
-                    	int[] pixels = new int[height * width];
-                    	vMap.getPixels(pixels, 0, width, 0, 0, width, height);
-            			double sum = 0;
-                    	for (int y = 0; y < height; y++) {
-                    		point.y = y;
-                			for (int x = 0; x < width; x++) {
-                    			point.x = x;
-                    			LatLng position = projection.fromScreenLocation(point);
-                    			if (PolyUtil.containsLocation(position, points, true)) {
-                      				int index = y * width + x;
-                      			    int R = (pixels[index] >> 16) & 0xff;
-                      			    int G = (pixels[index] >> 8) & 0xff;
-                      			    int B = pixels[index] & 0xff;
-                      			    sum += (R + G + B);
-                      			    if (sum != 0) {
-                      			    	MarkerOptions inMarkerOptions = new MarkerOptions();
-                                		inMarkerOptions.position(position);
-                                		inMarker = googleMap.addMarker(inMarkerOptions);
-                      			    }
-                      			    pixels[index] = 0xff000000 | (R << 16) | (G << 8)| B;
-                      			}
-                    		}
-                    	}
-                    	final double f_sum = sum;
-                    	mHandler.post(new Runnable() {
+            			final double[] sum = calculateStatistics(vMap, projection, point, overlayPoint);
+            			mHandler.post(new Runnable() {
                     		public void run() {
                         		//makePopupView(this, String.format("Average: %.2e sq meters", f_sum / (width * height)));
                     			LayoutInflater layoutInflater = (LayoutInflater) getBaseContext().getSystemService(LAYOUT_INFLATER_SERVICE);
@@ -260,15 +240,16 @@ public class MainActivity extends FragmentActivity {
                     			popupWindow.showAtLocation(popupView, Gravity.BOTTOM, 0, 0);
                     			
                     			AreaTextView = (TextView) popupView.findViewById(R.id.areaValue);
-                    			AreaTextView.setText(String.format("Average: %.2e sq meters", f_sum / (width * height)));
-                    			
+                    			AreaTextView.setText(String.format("Average:  %.2e sq meters", sum[0] / (vMap.getWidth() * vMap.getHeight())));
+                    			TextView VarTextView = (TextView) popupView.findViewById(R.id.varValue);
+                    			VarTextView.setText(String.format("Variance: %.2e sq meters", 
+                    					(sum[1] - (sum[0]*sum[0]/(vMap.getWidth() * vMap.getHeight())))/(vMap.getWidth() * vMap.getHeight())));
                     			Button btnDismiss = (Button) popupView.findViewById(R.id.dismiss);
                     	    	btnDismiss.setOnClickListener(new Button.OnClickListener() {
                     	    		public void onClick(View v) {
                     	    			popupWindow.dismiss();
                     	    		}
                     	    	});
-                    	    	
                     	    	interimPopup.dismiss();
                     		}
                     	});
@@ -304,5 +285,59 @@ public class MainActivity extends FragmentActivity {
     		}
     	});
     	return popupWindow;
+    }
+    
+    private double[] calculateStatistics(Bitmap vMap, Projection projection, Point point, Point overlayPoint) {
+    	//final Bitmap vMap = BitmapFactory.decodeResource(getResources(), R.drawable.w_overlay);
+    	final int height = vMap.getHeight();
+    	final int width = vMap.getWidth();
+    	//final Projection projection = googleMap.getProjection();
+    	//final Point point = projection.toScreenLocation(overlayLocation);
+    	
+    	int minY;
+    	int maxY = minY = projection.toScreenLocation(points.get(0)).y;
+    	
+    	int minX;
+    	int maxX = minX = projection.toScreenLocation(points.get(0)).x;
+    	
+    	for (LatLng polygonPoint: points) {
+    		Point screen = projection.toScreenLocation(polygonPoint);
+    		if (screen.y < minY)
+    			minY = screen.y;
+    		else if (screen.y > maxY)
+    			maxY = screen.y;
+    		if (screen.x < minX)
+    			minX = screen.x;
+    		else if (screen.y > maxX)
+    			maxX = screen.x;
+    	}
+    	
+    	int[] pixels = new int[height * width];
+    	vMap.getPixels(pixels, 0, width, 0, 0, width, height);
+		double[] sum = {0, 0};
+		
+    	for (int y = 0; y < height; y++) {
+    		point.y = y + overlayPoint.y;
+    		if (point.y > minY && point.y < maxY) {
+    			for (int x = 0; x < width; x++) {
+					point.x = x + overlayPoint.x;
+    				if (point.x > minX && point.x < maxX) {
+    					LatLng position = projection.fromScreenLocation(point);
+    					if (PolyUtil.containsLocation(position, points, true)) {
+    						int index = y * width + x;
+    						//int A = (pixels[index] >> 24) & 0xff;
+    						int R = ((pixels[index] >> 16) & 0xff) % 255;
+    						int G = ((pixels[index] >> 8) & 0xff) % 255;
+    						int B = (pixels[index] & 0xff) % 255;
+    						sum[0] += (R + G + B);
+    						sum[1] += (R + G + B)*(R + G + B);
+    						//Log.e(TAG, String.format("%d, %d, %d", R, G, B));
+    						pixels[index] = 0xff000000 | (R << 16) | (G << 8)| B;
+    					}
+    				}
+    			}
+    		}
+    	}
+    	return sum;
     }
 }
